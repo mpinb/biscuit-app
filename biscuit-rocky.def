@@ -1,0 +1,110 @@
+Bootstrap: docker
+# Using the 'devel' tag to ensure nvcc (CUDA compiler) and headers are included
+From: nvidia/cuda:12.3.2-devel-rockylinux9
+
+%labels
+    Author MPINB sco
+    Version 1.0.0
+    Description Rocky Linux 9 Dev/Java/CUDA Container customized to run Biscuit (Bioinformatics Tool)
+
+# Copying the script for loading soma modules and slurm commands to the container image
+%files
+/etc/profile.d/soma_modules.sh
+/usr/bin/sacct
+/usr/bin/sacctmgr
+/usr/bin/salloc
+/usr/bin/sattach
+/usr/bin/sbatch
+/usr/bin/sbcast
+/usr/bin/scancel
+/usr/bin/scontrol
+/usr/bin/sdiag
+/usr/bin/sgather
+/usr/bin/sinfo
+/usr/bin/sprio
+/usr/bin/squeue
+/usr/bin/sreport
+/usr/bin/srun
+/usr/bin/sshare
+/usr/bin/sstat
+/usr/bin/strigger
+/usr/bin/sview
+
+%post
+    # Set timezone and locale
+    # Install locale packages first
+    dnf -y install glibc-langpack-en glibc-locale-source glibc-all-langpacks
+    localedef -i en_US -f UTF-8 en_US.UTF-8
+
+    # Set locale environment variables
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    
+    # Set timezone
+    export TZ=Europe/Berlin
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+    # Update OS and install prerequisites
+    # Add --allowerasing to avoid conflicts during 'curl' package installation
+    # The following utilities are required by various development tools and IDEs
+    # tar, wget (or curl), dd, chmod, test, mkdir, echo, mv, uname, command, and gzip
+    dnf -y update
+    dnf -y install --allowerasing \
+        git \
+        curl \
+        wget \
+        unzip \
+        tar \
+        procps-ng \
+        which \
+        gcc \
+        gcc-c++ \
+        make \
+        file
+    
+    # Install uv using UV_INSTALL_DIR to control install location
+    # Also disable shell profile modifications with UV_NO_MODIFY_PATH
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" UV_NO_MODIFY_PATH=1 sh
+    
+    # Add uv to PATH for this build session
+    export PATH="/usr/local/bin:$PATH"
+    
+    # Create a virtual environment in /opt using uv (much faster than python -m venv)
+    uv venv /opt/biscuit-venv --python python3.12
+    
+    # Install biscuit into the venv using uv (much faster than pip)
+    uv pip install --python /opt/biscuit-venv/bin/python biscuit
+    
+    # Clean up to reduce image size
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    # Ensure UTF-8 support
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export TZ=Europe/Berlin
+    
+    # Add uv to PATH
+    export PATH=/usr/local/cargo/bin:$PATH
+    
+    # Add virtual environment to PATH
+    export PATH=/opt/biscuit-venv/bin:$PATH
+
+%runscript
+    # Default runscript launches biscuit notebook from the biscuit python virtual environment using jupyter
+    jupyter notebook --ip=`hostname -i` --no-browser --allow-root "$@"
+
+%labels
+    Author valerio
+    Version 2.2
+    Description Rocky Linux 9 with BISCUIT (BioImage Segmentation Comparison Utility and Interactive Tool)
+
+%help
+    This container includes BISCUIT, an open-source jupyter-based tool for benchmarking and comparing bioimage segmentation algorithms.
+    Example of models that can be benchmarked include Cellpose, Stardist, Omnipose, and many others.
+
+    For more information about BISCUIT, please visit: 
+    https://biscuit.let-your-data-speak.com/
