@@ -17,7 +17,12 @@
 
 ### Quick Start
 
-5. **Open the notebooks:**
+**Biscuit** was designed to be used in Google Colab. However, it is also possible to run it **on-prem** using an interactive compute node from soma HPC cluster.
+
+Please refer to the [README_HPC.md](README_HPC.md) for a detailed usage guide.
+
+### Open and follow any of these notebooks:
+
    - Google Colab notebook: https://colab.research.google.com/github/ScopeM/biscuit/blob/main/notebook/biscuit_google_colab.ipynb
    - `notebook/biscuit_eth_euler.ipynb` - ETH Euler cluster segmentation notebook (copy to the cluster an use it there)
 

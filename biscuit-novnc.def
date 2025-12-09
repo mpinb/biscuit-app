@@ -1,0 +1,296 @@
+Bootstrap: docker
+From: nvidia/cuda:12.3.2-devel-rockylinux9
+
+%labels
+    Author MPINB sco
+    Version 2.0.0
+    Description Rocky Linux 9 with BISCUIT and MIDAP - GPU-enabled container for bioimage analysis
+
+%files
+    /etc/profile.d/soma_modules.sh
+    /usr/bin/sacct
+    /usr/bin/sacctmgr
+    /usr/bin/salloc
+    /usr/bin/sattach
+    /usr/bin/sbatch
+    /usr/bin/sbcast
+    /usr/bin/scancel
+    /usr/bin/scontrol
+    /usr/bin/sdiag
+    /usr/bin/sgather
+    /usr/bin/sinfo
+    /usr/bin/sprio
+    /usr/bin/squeue
+    /usr/bin/sreport
+    /usr/bin/srun
+    /usr/bin/sshare
+    /usr/bin/sstat
+    /usr/bin/strigger
+    /usr/bin/sview
+
+%post
+    # Set timezone and locale
+    dnf -y install glibc-langpack-en glibc-locale-source glibc-all-langpacks
+    localedef -i en_US -f UTF-8 en_US.UTF-8
+
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export TZ=Europe/Berlin
+    
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+    # Update OS and install system prerequisites
+    dnf -y update
+    dnf -y install --allowerasing \
+        git \
+        curl \
+        wget \
+        unzip \
+        tar \
+        procps-ng \
+        which \
+        gcc \
+        gcc-c++ \
+        make \
+        file \
+        mesa-libGL \
+        libXext \
+        libSM \
+        libXrender \
+        libgomp \
+        freeglut
+
+    # Install NoVNC dependencies for MIDAP GUI
+    dnf -y install \
+        tigervnc-server \
+        xorg-x11-server-Xvfb \
+        xterm \
+        fluxbox \
+        novnc \
+        python3-websockify \
+        supervisor
+    
+    # Install uv package manager
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" UV_NO_MODIFY_PATH=1 sh
+    
+    export PATH="/usr/local/bin:$PATH"
+    
+    # Create virtual environment with Python 3.12
+    uv venv /opt/biscuit-venv --python python3.12
+    
+    # Activate virtual environment for installations
+    export VIRTUAL_ENV=/opt/biscuit-venv
+    export PATH=/opt/biscuit-venv/bin:$PATH
+    
+    # Install core dependencies using uv (much faster than pip)
+    # Core scientific computing stack
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "tensorflow==2.18.0" \
+        "numpy>=1.26,<2" \
+        "scipy>=1.11.4,<1.12" \
+        "scikit-image>=0.22.0" \
+        "opencv-python>=4.9.0.80" \
+        "pandas>=2.1.0" \
+        "tqdm>=4.66" \
+        "gitpython>=3.1.40" \
+        "coverage>=7.3"
+    
+    # Install segmentation tools
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "stardist>=0.9.1" \
+        "omnipose>=1.0.6" \
+        "csbdeep" \
+        "fastremap" \
+        "edt" \
+        "segment_anything"
+    
+    # Install visualization and interaction tools
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "mpl_interactions>=0.24" \
+        "ipympl>=0.9" \
+        "napari[all]"
+    
+    # Install additional dependencies from notebooks
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "igraph" \
+        "texttable" \
+        "mgen" \
+        "pbr" \
+        "ncolor" \
+        "mahotas" \
+        "torchvf" \
+        "peakdetect" \
+        "fill_voids" \
+        "roifile" \
+        "natsort" \
+        "ipyfilechooser" \
+        "btrack==0.4.6"
+    
+    # Install bioimageio with ONNX and PyTorch support
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "bioimageio.core[onnx,pytorch]"
+    
+    # Install BISCUIT from GitHub
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://github.com/ScopeM/biscuit.git@main"
+    
+    # Install Cellpose (latest version from GitHub)
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://www.github.com/mouseland/cellpose.git"
+    
+    # Install MIDAP (using dev branch as referenced in euler notebook)
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://github.com/ajrzepiela/midap.git@dev"
+    
+    # Download BISCUIT custom segmentation models
+    /opt/biscuit-venv/bin/biscuit_download --force
+    
+    # Create the environment ready marker
+    mkdir -p /content
+    touch /content/.biscuit_env_ready
+    
+    # Create NoVNC startup scripts
+    mkdir -p /opt/scripts
+    
+    # VNC startup script
+    cat > /opt/scripts/start_vnc.sh << 'EOF'
+#!/bin/bash
+export DISPLAY=:1
+export USER=${USER:-biscuit}
+export HOME=${HOME:-/tmp}
+
+# Start VNC server
+vncserver :1 -geometry 1920x1080 -depth 24 -SecurityTypes None -rfbport 5901 &
+
+# Wait for VNC to start
+sleep 2
+
+# Start window manager
+DISPLAY=:1 fluxbox &
+
+# Start noVNC
+/usr/bin/websockify --web=/usr/share/novnc/ 6080 localhost:5901 &
+EOF
+    chmod +x /opt/scripts/start_vnc.sh
+    
+    # MIDAP GUI launcher script
+    cat > /opt/scripts/start_midap_gui.sh << 'EOF'
+#!/bin/bash
+export DISPLAY=:1
+source /opt/biscuit-venv/bin/activate
+cd ${HOME:-/tmp}
+python -m midap.apps.gui_app
+EOF
+    chmod +x /opt/scripts/start_midap_gui.sh
+    
+    # Combined launcher script
+    cat > /opt/scripts/start_services.sh << 'EOF'
+#!/bin/bash
+
+MODE=${1:-jupyter}
+
+if [ "$MODE" = "gui" ]; then
+    echo "Starting MIDAP GUI mode with NoVNC..."
+    /opt/scripts/start_vnc.sh
+    sleep 3
+    /opt/scripts/start_midap_gui.sh
+elif [ "$MODE" = "both" ]; then
+    echo "Starting both Jupyter and MIDAP GUI..."
+    /opt/scripts/start_vnc.sh
+    sleep 3
+    /opt/scripts/start_midap_gui.sh &
+    # Start Jupyter on a different port to avoid conflicts
+    jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+else
+    echo "Starting Jupyter notebook..."
+    jupyter notebook --ip=$(hostname -i) --no-browser --allow-root "$@"
+fi
+EOF
+    chmod +x /opt/scripts/start_services.sh
+    
+    # Clean up to reduce image size
+    dnf clean all
+    rm -rf /var/cache/dnf
+    rm -rf /tmp/*
+
+%environment
+    # Locale and timezone
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export TZ=Europe/Berlin
+    
+    # Add virtual environment to PATH
+    export PATH=/opt/biscuit-venv/bin:$PATH
+    export VIRTUAL_ENV=/opt/biscuit-venv
+    
+    # CUDA environment
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+    
+    # For GUI applications
+    export QT_XKB_CONFIG_ROOT=/usr/share/X11/xkb
+    
+    # Marker for pre-installed environment
+    export BISCUIT_ENV_READY=1
+
+%runscript
+    # Default: run Jupyter notebook
+    # Use: apptainer run image.sif [jupyter|gui|both] [additional args]
+    /opt/scripts/start_services.sh "$@"
+
+%startscript
+    # For instance start (apptainer instance start)
+    /opt/scripts/start_services.sh both
+
+%help
+    =========================================================================
+    BISCUIT & MIDAP Container - Bioimage Segmentation and Analysis
+    =========================================================================
+    
+    This container provides a complete environment for:
+    - BISCUIT: Interactive Jupyter-based bioimage segmentation benchmarking
+    - MIDAP: GUI-based microscopy data analysis platform
+    
+    USAGE MODES:
+    ------------
+    1. Jupyter Notebook (default):
+       apptainer run image.sif
+       or
+       apptainer run image.sif jupyter
+    
+    2. MIDAP GUI (via NoVNC):
+       apptainer run image.sif gui
+       Access via browser: http://<node-hostname>:6080/vnc.html
+    
+    3. Both services:
+       apptainer run image.sif both
+       Jupyter: http://<node-hostname>:8888
+       MIDAP GUI: http://<node-hostname>:6080/vnc.html
+    
+    ENVIRONMENT:
+    -----------
+    - Python 3.12 virtual environment at /opt/biscuit-venv
+    - Pre-installed segmentation models via biscuit_download
+    - Environment marker: /content/.biscuit_env_ready
+    - GPU support via CUDA 12.3.2
+    
+    INCLUDED TOOLS:
+    --------------
+    - Cellpose, StarDist, Omnipose, UNet
+    - TensorFlow 2.18.0 with GPU support
+    - Napari for visualization
+    - BioimageIO core with ONNX/PyTorch
+    - btrack for cell tracking
+    
+    SLURM USAGE:
+    -----------
+    See the accompanying SLURM script for HPC job submission.
+    
+    MORE INFO:
+    ---------
+    BISCUIT: https://biscuit.let-your-data-speak.com/
+    MIDAP: https://github.com/Microbial-Systems-Ecology/midap
+    
+    =========================================================================
