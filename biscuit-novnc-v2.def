@@ -1,0 +1,511 @@
+Bootstrap: docker
+From: nvidia/cuda:12.3.2-devel-rockylinux9
+
+%labels
+    Author MPINB sco
+    Version 2.1.0
+    Description Rocky Linux 9 with BISCUIT and MIDAP - GPU-enabled container for bioimage analysis
+
+%files
+    /etc/profile.d/soma_modules.sh
+    /usr/bin/sacct
+    /usr/bin/sacctmgr
+    /usr/bin/salloc
+    /usr/bin/sattach
+    /usr/bin/sbatch
+    /usr/bin/sbcast
+    /usr/bin/scancel
+    /usr/bin/scontrol
+    /usr/bin/sdiag
+    /usr/bin/sgather
+    /usr/bin/sinfo
+    /usr/bin/sprio
+    /usr/bin/squeue
+    /usr/bin/sreport
+    /usr/bin/srun
+    /usr/bin/sshare
+    /usr/bin/sstat
+    /usr/bin/strigger
+    /usr/bin/sview
+
+%post
+    # Set timezone and locale
+    dnf -y install glibc-langpack-en glibc-locale-source glibc-all-langpacks
+    localedef -i en_US -f UTF-8 en_US.UTF-8
+
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export TZ=Europe/Berlin
+    
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+    # Update system (exclude problematic packages for fakeroot compatibility)
+    dnf update -y --setopt=strict=0 --exclude=tzdata --exclude=unbound-libs
+    
+    # Enable EPEL and CRB repositories for additional packages
+    dnf install -y epel-release
+    dnf config-manager --set-enabled crb || true
+    
+    # Install core utilities
+    dnf -y install --allowerasing \
+        git \
+        curl \
+        wget \
+        unzip \
+        tar \
+        procps-ng \
+        which \
+        gcc \
+        gcc-c++ \
+        make \
+        file \
+        ca-certificates \
+        openssh-clients
+
+    # Install TigerVNC server and XFCE desktop (same as your napari container)
+    echo "Installing TigerVNC and XFCE..."
+    dnf install -y --skip-broken \
+        tigervnc-server \
+        xorg-x11-server-utils \
+        xfce4-session \
+        xfce4-panel \
+        xfce4-terminal \
+        xfwm4 \
+        xfdesktop \
+        thunar \
+        dbus-x11
+    
+    # Verify critical components
+    which vncserver || (echo "ERROR: TigerVNC not installed!" && exit 1)
+    which Xvnc || (echo "ERROR: Xvnc not installed!" && exit 1)
+    which startxfce4 || (echo "ERROR: XFCE not installed!" && exit 1)
+    
+    # Install graphics libraries for GUI applications
+    dnf install -y \
+        mesa-libGL \
+        mesa-libGLU \
+        libXext \
+        libSM \
+        libXrender \
+        libgomp \
+        fontconfig \
+        freetype
+
+    # Install Python 3 for websockify
+    dnf install -y python3 python3-pip
+    
+    # Install websockify via pip (same as your approach)
+    python3 -m pip install --no-cache-dir --upgrade pip
+    pip3 install --no-cache-dir websockify
+    
+    # Install noVNC from GitHub (same as your approach)
+    cd /opt
+    git clone https://github.com/novnc/noVNC.git
+    chmod +x /opt/noVNC/utils/novnc_proxy
+    
+    # Pre-install websockify in noVNC utils
+    cd /opt/noVNC/utils
+    git clone https://github.com/novnc/websockify.git
+    cd /
+    
+    # Install uv package manager for Python packages
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" UV_NO_MODIFY_PATH=1 sh
+    
+    export PATH="/usr/local/bin:$PATH"
+    
+    # Create virtual environment with Python 3.12
+    uv venv /opt/biscuit-venv --python python3.12
+    
+    # Activate virtual environment for installations
+    export VIRTUAL_ENV=/opt/biscuit-venv
+    export PATH=/opt/biscuit-venv/bin:$PATH
+    
+    echo "Installing Python dependencies..."
+    
+    # Install core dependencies using uv (much faster than pip)
+    # Core scientific computing stack
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "tensorflow==2.18.0" \
+        "numpy>=1.26,<2" \
+        "scipy>=1.11.4,<1.12" \
+        "scikit-image>=0.22.0" \
+        "opencv-python>=4.9.0.80" \
+        "pandas>=2.1.0" \
+        "tqdm>=4.66" \
+        "gitpython>=3.1.40" \
+        "coverage>=7.3"
+    
+    # Install segmentation tools
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "stardist>=0.9.1" \
+        "omnipose>=1.0.6" \
+        "csbdeep" \
+        "fastremap" \
+        "edt" \
+        "segment_anything"
+    
+    # Install visualization and interaction tools
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "mpl_interactions>=0.24" \
+        "ipympl>=0.9" \
+        "napari[all]"
+    
+    # Install additional dependencies from notebooks
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "igraph" \
+        "texttable" \
+        "mgen" \
+        "pbr" \
+        "ncolor" \
+        "mahotas" \
+        "torchvf" \
+        "peakdetect" \
+        "fill_voids" \
+        "roifile" \
+        "natsort" \
+        "ipyfilechooser" \
+        "btrack==0.4.6"
+    
+    # Install bioimageio with ONNX and PyTorch support
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "bioimageio.core[onnx,pytorch]"
+    
+    # Install BISCUIT from GitHub
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://github.com/ScopeM/biscuit.git@main"
+    
+    # Install Cellpose (latest version from GitHub)
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://www.github.com/mouseland/cellpose.git"
+    
+    # Install MIDAP (using dev branch as referenced in euler notebook)
+    uv pip install --python /opt/biscuit-venv/bin/python \
+        "git+https://github.com/ajrzepiela/midap.git@dev"
+    
+    echo "Downloading BISCUIT custom segmentation models..."
+    # Download BISCUIT custom segmentation models
+    /opt/biscuit-venv/bin/biscuit_download --force
+    
+    # Create the environment ready marker
+    mkdir -p /content
+    touch /content/.biscuit_env_ready
+    
+    # Create VNC directory structure (following your napari pattern)
+    mkdir -p /opt/vnc-config
+    
+    # Create default xstartup script for XFCE
+    cat > /opt/vnc-config/xstartup << 'EOF'
+#!/bin/bash
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+export GDK_BACKEND=x11
+dbus-launch --exit-with-session startxfce4 &
+EOF
+    chmod +x /opt/vnc-config/xstartup
+    
+    # Create VNC password setup script (allows user override)
+    cat > /opt/vnc-config/setup-vnc.sh << 'EOF'
+#!/bin/bash
+# Setup VNC password in user's home directory
+mkdir -p ~/.vnc
+if [ ! -f ~/.vnc/passwd ]; then
+    # Use environment variable or default password
+    VNC_PASSWORD="${BISCUIT_VNC_PASSWORD:-biscuit}"
+    echo "$VNC_PASSWORD" | vncpasswd -f > ~/.vnc/passwd
+    chmod 600 ~/.vnc/passwd
+fi
+# Copy xstartup if not present
+if [ ! -f ~/.vnc/xstartup ]; then
+    cp /opt/vnc-config/xstartup ~/.vnc/xstartup
+    chmod +x ~/.vnc/xstartup
+fi
+EOF
+    chmod +x /opt/vnc-config/setup-vnc.sh
+    
+    # Create helper scripts for different startup modes
+    mkdir -p /opt/scripts
+    
+    # Script to start VNC and noVNC
+    cat > /opt/scripts/start-vnc-services.sh << 'EOF'
+#!/bin/bash
+# Start VNC and noVNC services
+
+# Ensure /usr/bin and /usr/local/bin are in PATH
+export PATH=/usr/bin:/usr/local/bin:/opt/biscuit-venv/bin:$PATH
+
+# Setup VNC configuration
+/opt/vnc-config/setup-vnc.sh
+
+# Find an available display number
+DISPLAY_NUM=1
+while [ -f /tmp/.X${DISPLAY_NUM}-lock ] || [ -f /tmp/.X11-unix/X${DISPLAY_NUM} ]; do
+    DISPLAY_NUM=$((DISPLAY_NUM + 1))
+    if [ $DISPLAY_NUM -gt 99 ]; then
+        echo "ERROR: No available display numbers"
+        exit 1
+    fi
+done
+
+export DISPLAY=:${DISPLAY_NUM}
+echo "Using display :${DISPLAY_NUM}"
+
+# Start TigerVNC server
+VNC_GEOMETRY="${BISCUIT_VNC_GEOMETRY:-1920x1080}"
+echo "Starting TigerVNC server on display :${DISPLAY_NUM} (${VNC_GEOMETRY})..."
+vncserver :${DISPLAY_NUM} -geometry ${VNC_GEOMETRY} -depth 24 -localhost no
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to start VNC server"
+    exit 1
+fi
+
+# Wait for VNC server to be ready
+sleep 3
+
+# Calculate VNC port
+VNC_PORT=$((5900 + DISPLAY_NUM))
+NOVNC_PORT="${BISCUIT_NOVNC_PORT:-6080}"
+
+# Start noVNC with websockify
+echo "Starting noVNC on port ${NOVNC_PORT}..."
+/opt/noVNC/utils/novnc_proxy --vnc localhost:${VNC_PORT} --listen ${NOVNC_PORT} &
+NOVNC_PID=$!
+
+# Verify noVNC started
+sleep 2
+if ! kill -0 $NOVNC_PID 2>/dev/null; then
+    echo "ERROR: Failed to start noVNC"
+    vncserver -kill :${DISPLAY_NUM}
+    exit 1
+fi
+
+echo "========================================"
+echo "VNC Services Started Successfully!"
+echo "========================================"
+echo "VNC Display: :${DISPLAY_NUM}"
+echo "VNC Port: ${VNC_PORT}"
+echo "noVNC Port: ${NOVNC_PORT}"
+echo "noVNC URL: http://$(hostname):${NOVNC_PORT}/vnc.html"
+echo "VNC Password: ${BISCUIT_VNC_PASSWORD:-biscuit}"
+echo "========================================"
+
+# Export for other scripts
+export VNC_DISPLAY=":${DISPLAY_NUM}"
+export VNC_PORT
+export NOVNC_PID
+EOF
+    chmod +x /opt/scripts/start-vnc-services.sh
+    
+    # Script to start MIDAP GUI
+    cat > /opt/scripts/start-midap-gui.sh << 'EOF'
+#!/bin/bash
+# Start MIDAP GUI application
+export PATH=/opt/biscuit-venv/bin:$PATH
+export DISPLAY=${VNC_DISPLAY:-:1}
+
+echo "Starting MIDAP GUI on display ${DISPLAY}..."
+cd ${HOME:-/workspace}
+python -m midap.apps.gui_app
+EOF
+    chmod +x /opt/scripts/start-midap-gui.sh
+    
+    # Script to start Jupyter
+    cat > /opt/scripts/start-jupyter.sh << 'EOF'
+#!/bin/bash
+# Start Jupyter notebook
+export PATH=/opt/biscuit-venv/bin:$PATH
+JUPYTER_PORT="${BISCUIT_JUPYTER_PORT:-8888}"
+
+echo "Starting Jupyter notebook on port ${JUPYTER_PORT}..."
+jupyter notebook \
+    --ip=0.0.0.0 \
+    --port=${JUPYTER_PORT} \
+    --no-browser \
+    --allow-root \
+    --notebook-dir=${HOME:-/workspace} \
+    "$@"
+EOF
+    chmod +x /opt/scripts/start-jupyter.sh
+    
+    # Main launcher script with cleanup
+    cat > /opt/scripts/launcher.sh << 'EOF'
+#!/bin/bash
+# Main launcher script with proper cleanup
+
+MODE="${1:-jupyter}"
+
+# Setup cleanup function
+cleanup() {
+    echo ""
+    echo "Shutting down services..."
+    if [ ! -z "$VNC_DISPLAY" ]; then
+        vncserver -kill $VNC_DISPLAY 2>/dev/null
+    fi
+    if [ ! -z "$NOVNC_PID" ]; then
+        kill $NOVNC_PID 2>/dev/null
+    fi
+    # Kill any remaining jupyter processes
+    pkill -f "jupyter" 2>/dev/null
+    exit 0
+}
+
+trap cleanup EXIT INT TERM
+
+case "$MODE" in
+    jupyter)
+        echo "Starting Jupyter notebook mode..."
+        /opt/scripts/start-jupyter.sh "${@:2}"
+        ;;
+    
+    gui)
+        echo "Starting MIDAP GUI mode..."
+        source /opt/scripts/start-vnc-services.sh
+        /opt/scripts/start-midap-gui.sh
+        # Keep running
+        wait
+        ;;
+    
+    both)
+        echo "Starting both Jupyter and MIDAP GUI..."
+        source /opt/scripts/start-vnc-services.sh
+        /opt/scripts/start-midap-gui.sh &
+        MIDAP_PID=$!
+        /opt/scripts/start-jupyter.sh "${@:2}"
+        # Jupyter runs in foreground, MIDAP in background
+        ;;
+    
+    *)
+        echo "ERROR: Unknown mode '$MODE'"
+        echo "Valid modes: jupyter, gui, both"
+        exit 1
+        ;;
+esac
+EOF
+    chmod +x /opt/scripts/launcher.sh
+    
+    # Clean up to reduce image size
+    dnf clean all
+    rm -rf /var/cache/dnf
+    rm -rf /tmp/*
+    
+    echo "=== Build verification ==="
+    echo "vncserver: $(which vncserver)"
+    echo "Xvnc: $(which Xvnc)"
+    echo "XFCE: $(which startxfce4)"
+    echo "noVNC: $(ls -la /opt/noVNC/utils/novnc_proxy)"
+    echo "Python: $(which python3)"
+    echo "Biscuit venv: $(ls -la /opt/biscuit-venv/bin/python)"
+    echo "=========================="
+
+%environment
+    # Locale and timezone
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export TZ=Europe/Berlin
+    
+    # X11 settings for GUI
+    export XDG_SESSION_TYPE=x11
+    export GDK_BACKEND=x11
+    export QT_XKB_CONFIG_ROOT=/usr/share/X11/xkb
+    
+    # Add virtual environment to PATH
+    export PATH=/opt/biscuit-venv/bin:$PATH
+    export VIRTUAL_ENV=/opt/biscuit-venv
+    
+    # CUDA environment
+    export CUDA_HOME=/usr/local/cuda
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+    
+    # Marker for pre-installed environment
+    export BISCUIT_ENV_READY=1
+
+%runscript
+    # Ensure paths are set
+    export PATH=/usr/bin:/usr/local/bin:/opt/biscuit-venv/bin:$PATH
+    
+    # Run the launcher script
+    /opt/scripts/launcher.sh "$@"
+
+%startscript
+    # For instance start (apptainer instance start)
+    export PATH=/usr/bin:/usr/local/bin:/opt/biscuit-venv/bin:$PATH
+    /opt/scripts/launcher.sh both
+
+%help
+    =========================================================================
+    BISCUIT & MIDAP Container - Bioimage Segmentation and Analysis
+    =========================================================================
+    
+    Rocky Linux 9 container with GPU support for:
+    - BISCUIT: Interactive Jupyter-based bioimage segmentation benchmarking
+    - MIDAP: GUI-based microscopy data analysis platform
+    
+    Built with TigerVNC and XFCE desktop environment for reliable remote access.
+    
+    USAGE MODES:
+    ------------
+    1. Jupyter Notebook (default):
+       apptainer run image.sif
+       apptainer run image.sif jupyter
+    
+    2. MIDAP GUI (via noVNC):
+       apptainer run image.sif gui
+       Access: http://<hostname>:6080/vnc.html
+       Default password: biscuit
+    
+    3. Both services:
+       apptainer run image.sif both
+       Jupyter: http://<hostname>:8888
+       MIDAP GUI: http://<hostname>:6080/vnc.html
+    
+    ENVIRONMENT VARIABLES:
+    ---------------------
+    BISCUIT_VNC_PASSWORD    - VNC password (default: biscuit)
+    BISCUIT_VNC_GEOMETRY    - VNC resolution (default: 1920x1080)
+    BISCUIT_JUPYTER_PORT    - Jupyter port (default: 8888)
+    BISCUIT_NOVNC_PORT      - noVNC port (default: 6080)
+    
+    Example with custom settings:
+    export BISCUIT_VNC_PASSWORD="mysecret"
+    export BISCUIT_VNC_GEOMETRY="2560x1440"
+    apptainer run --nv --bind /data:/data image.sif gui
+    
+    PRE-INSTALLED ENVIRONMENT:
+    -------------------------
+    - Python 3.12 in /opt/biscuit-venv
+    - TensorFlow 2.18.0 with GPU support
+    - Cellpose, StarDist, Omnipose, Segment Anything
+    - Napari for visualization
+    - Custom segmentation models pre-downloaded
+    - Environment marker: /content/.biscuit_env_ready
+    
+    VNC CONFIGURATION:
+    -----------------
+    VNC config files can be customized in user's home:
+    - ~/.vnc/passwd    - VNC password file
+    - ~/.vnc/xstartup  - VNC startup script
+    
+    If these don't exist, defaults will be created automatically.
+    
+    CHANGING VNC PASSWORD:
+    ---------------------
+    Before running:
+      export BISCUIT_VNC_PASSWORD="newpassword"
+    
+    Or inside container:
+      apptainer exec image.sif vncpasswd
+    
+    GPU SUPPORT:
+    -----------
+    Always use --nv flag for GPU access:
+      apptainer run --nv image.sif
+    
+    MORE INFO:
+    ---------
+    BISCUIT: https://biscuit.let-your-data-speak.com/
+    MIDAP: https://github.com/Microbial-Systems-Ecology/midap
+    
+    =========================================================================
