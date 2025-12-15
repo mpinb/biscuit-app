@@ -187,21 +187,22 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     
     # Clone BISCUIT
     git clone https://github.com/ScopeM/biscuit.git
-    cd biscuit
-    git checkout main
-    cd ..
+    #cd biscuit
+    #git checkout main
+    #cd ..
     
     # Clone Cellpose
     git clone https://www.github.com/mouseland/cellpose.git
-    cd cellpose
+    #cd cellpose
     # Use latest commit on main
-    cd ..
+    #cd ..
     
     # Clone MIDAP
     git clone https://github.com/ajrzepiela/midap.git
-    cd midap
-    git checkout dev
-    cd ..
+    #cd midap
+    #git checkout dev
+    #git -C /tmp/git-repos/midap -c safe.directory=/tmp/git-repos/midap checkout main
+    #cd ..
     
     echo "Installing from cloned repositories..."
     # Install BISCUIT from local clone
