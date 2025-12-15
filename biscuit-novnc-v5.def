@@ -110,8 +110,9 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     cd /
     
     # Configure Git to avoid ownership issues in shared filesystems
-    git config --global --add safe.directory '*'
-    git config --global advice.detachedHead false
+    # This would only work if the container is built in an environment where .gitconfig is writable 
+    # git config --global --add safe.directory '*'
+    # git config --global advice.detachedHead false
     
     # Install uv package manager for Python packages
     curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" UV_NO_MODIFY_PATH=1 sh
