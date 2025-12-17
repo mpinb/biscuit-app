@@ -122,7 +122,10 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     # Set UV cache to local directory (not GPFS/shared filesystem)
     export UV_CACHE_DIR=/tmp/uv-cache
     mkdir -p $UV_CACHE_DIR
-    
+
+    # Use copy mode to avoid hardlinks on shared filesystems
+    export UV_LINK_MODE=copy
+
     # Create virtual environment with Python 3.12
     uv venv /opt/biscuit-venv --python python3.12
     
@@ -179,44 +182,19 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     # Install bioimageio with ONNX and PyTorch support
     uv pip install --python /opt/biscuit-venv/bin/python \
         "bioimageio.core[onnx,pytorch]"
-    
-    echo "Cloning GitHub repositories..."
-    # Clone repositories first to avoid Git ownership issues
-    mkdir -p /tmp/git-repos
-    cd /tmp/git-repos
-    
-    # Clone BISCUIT
-    git clone https://github.com/ScopeM/biscuit.git
-    #cd biscuit
-    #git checkout main
-    #cd ..
-    
-    # Clone Cellpose
-    git clone https://www.github.com/mouseland/cellpose.git
-    #cd cellpose
-    # Use latest commit on main
-    #cd ..
-    
-    # Clone MIDAP
-    git clone https://github.com/ajrzepiela/midap.git
-    #cd midap
-    #git checkout dev
-    #git -C /tmp/git-repos/midap -c safe.directory=/tmp/git-repos/midap checkout main
-    #cd ..
-    
-    echo "Installing from cloned repositories..."
-    # Install BISCUIT from local clone
+
+    # Install cellpose
     uv pip install --python /opt/biscuit-venv/bin/python \
-        /tmp/git-repos/biscuit
-    
-    # Install Cellpose from local clone
+        "cellpose>=4.0.0"
+
+    # Install BISCUIT from GitHub
     uv pip install --python /opt/biscuit-venv/bin/python \
-        /tmp/git-repos/cellpose
+        "git+https://github.com/ScopeM/biscuit.git"
     
-    # Install MIDAP from local clone
+    # Install MIDAP from GitHub
     uv pip install --python /opt/biscuit-venv/bin/python \
-        /tmp/git-repos/midap
-    
+        "git+https://github.com/ajrzepiela/midap.git"
+
     echo "Downloading BISCUIT custom segmentation models..."
     # Download BISCUIT custom segmentation models
     /opt/biscuit-venv/bin/biscuit_download --force
