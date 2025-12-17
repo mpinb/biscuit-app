@@ -126,8 +126,9 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     # Use copy mode to avoid hardlinks on shared filesystems
     export UV_LINK_MODE=copy
 
-    # Create virtual environment with Python 3.12
-    uv venv /opt/biscuit-venv --python python3.12
+    # Create virtual environment with Python 3.11
+    # Note: tensorflow 2.15 which is a midap dependency provides wheels only for python <=3.11
+    uv venv /opt/biscuit-venv --python python3.11
     
     # Activate virtual environment for installations
     export VIRTUAL_ENV=/opt/biscuit-venv
@@ -185,7 +186,7 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
 
     # Install cellpose
     uv pip install --python /opt/biscuit-venv/bin/python \
-        "cellpose>=4.0.0"
+        "cellpose>=4.0.8"
 
     echo "Cloning GitHub repositories..."
     # Clone repositories first to avoid Git ownership issues
