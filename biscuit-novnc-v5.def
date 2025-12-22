@@ -139,7 +139,7 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     # Install core dependencies using uv (much faster than pip)
     # Core scientific computing stack
     uv pip install --python /opt/biscuit-venv/bin/python \
-        "tensorflow==2.18.0" \
+        "tensorflow==2.15.0" \
         "numpy>=1.26,<2" \
         "scipy>=1.11.4,<1.12" \
         "scikit-image>=0.22.0" \
@@ -196,12 +196,12 @@ From: nvidia/cuda:12.3.2-devel-rockylinux9
     echo "Installing from cloned repositories..."
     # Install BISCUIT from local clone
     git clone https://github.com/ScopeM/biscuit.git
-    uv pip install --python /opt/biscuit-venv/bin/python \
+    uv pip install --no-deps --python /opt/biscuit-venv/bin/python \
         /tmp/git-repos/biscuit
     
     # Install MIDAP from local clone
     git clone https://github.com/ajrzepiela/midap.git
-    uv pip install --python /opt/biscuit-venv/bin/python \
+    uv pip install --no-deps --python /opt/biscuit-venv/bin/python \
         /tmp/git-repos/midap
 
     echo "Downloading BISCUIT custom segmentation models..."
@@ -499,8 +499,8 @@ EOF
     
     PRE-INSTALLED ENVIRONMENT:
     -------------------------
-    - Python 3.12 in /opt/biscuit-venv
-    - TensorFlow 2.18.0 with GPU support
+    - Python 3.11 in /opt/biscuit-venv
+    - TensorFlow 2.15.0 with GPU support
     - Cellpose, StarDist, Omnipose, Segment Anything
     - Napari for visualization
     - Custom segmentation models pre-downloaded
