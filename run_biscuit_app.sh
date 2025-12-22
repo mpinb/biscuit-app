@@ -1,14 +1,15 @@
 #!/bin/bash
 #SBATCH --job-name=biscuit-midap
+#SBATCH --partition=GPU-interactive
 #SBATCH --time=08:00:00
-#SBATCH --nodes=1
+#SBATCH --mem=32G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
-#SBATCH --output=biscuit-midap-%j.out
-#SBATCH --error=biscuit-midap-%j.err
+#SBATCH --output=logs/biscuit-midap-%j.log
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
 # ==============================================================================
 # BISCUIT & MIDAP Container Launcher for HPC
@@ -17,9 +18,12 @@
 # Supporting both Jupyter notebooks and MIDAP GUI via NoVNC
 # ==============================================================================
 
+# Load required modules
+module load apptainer/1.1.7
+
 # Configuration
 MODE="${MODE:-jupyter}"  # Options: jupyter, gui, both
-CONTAINER_IMAGE="${CONTAINER_IMAGE:-/path/to/biscuit-midap.sif}"
+CONTAINER_IMAGE="${CONTAINER_IMAGE:-/gpfs/soma_fs/scratch/containers/biscuit-rocky.sif}"
 WORK_DIR="${WORK_DIR:-$PWD}"
 JUPYTER_PORT="${JUPYTER_PORT:-8888}"
 NOVNC_PORT="${NOVNC_PORT:-6080}"
@@ -39,9 +43,9 @@ echo "Container: $CONTAINER_IMAGE"
 echo "========================================================================"
 
 # Create runtime directories
-export APPTAINER_CACHEDIR="${WORK_DIR}/.apptainer/cache"
-export APPTAINER_TMPDIR="${WORK_DIR}/.apptainer/tmp"
-mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
+#export APPTAINER_CACHEDIR="${WORK_DIR}/.apptainer/cache"
+#export APPTAINER_TMPDIR="${WORK_DIR}/.apptainer/tmp"
+#mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
 
 # Get node hostname and IP for connection info
 NODE_HOSTNAME=$(hostname)
@@ -154,8 +158,8 @@ BIND_MOUNTS="$WORK_DIR:/workspace"
 
 # Add common HPC data directories if they exist
 [ -d "/scratch" ] && BIND_MOUNTS="$BIND_MOUNTS,/scratch"
+[ -d "/gpfs" ] && BIND_MOUNTS="$BIND_MOUNTS,/gpfs"
 [ -d "/data" ] && BIND_MOUNTS="$BIND_MOUNTS,/data"
-[ -d "/home" ] && BIND_MOUNTS="$BIND_MOUNTS,/home"
 
 # Launch the container based on mode
 if [ "$MODE" = "jupyter" ]; then
