@@ -167,7 +167,7 @@ if [ "$MODE" = "jupyter" ]; then
         --bind "$BIND_MOUNTS" \
         --pwd /workspace \
         "$CONTAINER_IMAGE" \
-        jupyter notebook \
+        /opt/biscuit-venv/bin/python -m jupyter notebook \
             --ip=0.0.0.0 \
             --port=$JUPYTER_PORT \
             --no-browser \
@@ -190,7 +190,7 @@ elif [ "$MODE" = "both" ]; then
         --bind "$BIND_MOUNTS" \
         --pwd /workspace \
         "$CONTAINER_IMAGE" \
-        bash -c "/opt/scripts/start_vnc.sh && sleep 3 && /opt/scripts/start_midap_gui.sh & jupyter notebook --ip=0.0.0.0 --port=$JUPYTER_PORT --no-browser --allow-root --notebook-dir=/workspace"
+        bash -c "/opt/scripts/start_vnc.sh && sleep 3 && /opt/scripts/start_midap_gui.sh & /opt/biscuit-venv/bin/python -m jupyter notebook --ip=0.0.0.0 --port=$JUPYTER_PORT --no-browser --allow-root --notebook-dir=/workspace"
 
 else
     echo "ERROR: Invalid MODE specified: $MODE"
