@@ -1,0 +1,37 @@
+name: biscuit
+channels:
+  - bioconda
+  - pytorch
+  - nvidia
+  - sleap-deps
+  - sleap
+  - conda-forge
+  - nodefaults
+  - defaults
+dependencies:
+  - python=3.11
+  - pbr
+  - igraph
+  - tensorflow=2.18.0[build=*cuda*]
+  - roifile
+  - mahotas
+  - gitpython[version='>=3.1.40']
+  - pandas[version='>=2.1.0']
+  - numpy[version='>=1.26,<2']
+  - csbdeep
+  - coverage[version='>=7.3']
+  - stardist[version='>=0.9.1']
+  - texttable
+  - scipy[version='>=1.11.4,<1.12']
+  - ipympl[version='>=0.9']
+  - tqdm[version='>=4.66']
+  - edt
+  - opencv[version='>=4.9.0.80']
+  - btrack=0.4.6
+  - napari
+  - fastremap
+  - scikit-image[version='>=0.22.0']
+  - cellpose[version='>=4.0.8']
+  - ipyfilechooser
+  - natsort
+prefix: /gpfs/soma_fs/home/valerio/anaconda3/envs/biscuit
